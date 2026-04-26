@@ -119,6 +119,19 @@ Todas las operaciones se registran en un log. Ver más abajo.
 
 Devuelve el log de operaciones. Este log se persiste cada 5 segundos.
 
+## Metricas de negocio
+
+Cuando una operacion de `POST /exchange` se completa exitosamente, el servicio emite metricas StatsD (hacia Graphite) con acumulados por moneda:
+
+- `exchange-api.business.volume.<MONEDA>`: volumen operado acumulado por moneda (compras + ventas).
+- `exchange-api.business.net.<MONEDA>`: neto acumulado por moneda (compras suman, ventas restan).
+
+Configuracion por variables de entorno (opcionales):
+
+- `STATSD_HOST` (default: `graphite`)
+- `STATSD_PORT` (default: `8125`)
+- `STATSD_PREFIX` (default: `exchange-api`)
+
 ## TODO
 
 - No me gusta guardar todo en archivos .json, por ahora va, pero tendría que hacer algo distinto.

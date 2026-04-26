@@ -6,6 +6,7 @@
   "scripts": {
     "artillery": "artillery",
     "api": "artillery run rates.yaml -e api",
+    "exchange": "artillery run exchange.yaml -e api",
     "scenario": "./run-scenario.sh"
   },
   "author": "",

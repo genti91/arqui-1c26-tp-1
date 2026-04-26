@@ -1,4 +1,5 @@
 import { nanoid } from "nanoid";
+import { registerSuccessfulExchangeMetrics } from "./metrics.js";
 
 import { init as stateInit, getAccounts as stateAccounts, getRates as stateRates, getLog as stateLog } from "./state.js";
 
@@ -90,6 +91,13 @@ export async function exchange(exchangeRequest) {
         counterAccount.balance -= counterAmount;
         exchangeResult.ok = true;
         exchangeResult.counterAmount = counterAmount;
+
+        registerSuccessfulExchangeMetrics({
+          baseCurrency,
+          counterCurrency,
+          baseAmount,
+          counterAmount,
+        });
       } else {
         //could not transfer to clients' counter account, return base amount to client
         await transfer(baseAccount.id, clientBaseAccountId, baseAmount);
