@@ -1,51 +1,48 @@
 import { nanoid } from "nanoid";
 import { registerSuccessfulExchangeMetrics } from "./metrics.js";
 
-import { init as stateInit, getAccounts as stateAccounts, getRates as stateRates, getLog as stateLog } from "./state.js";
-
-let accounts;
-let rates;
-let log;
+import {
+  init as stateInit,
+  getAccounts as stateAccounts,
+  setAccountBalance as stateSetAccountBalance,
+  getRates as stateRates,
+  setRate as stateSetRate,
+  getLog as stateLog,
+  getAccountByCurrency,
+  reserveAccountBalanceByCurrency,
+  addAccountBalance,
+  addAccountBalanceAndLog,
+  appendLog,
+} from "./state.js";
 
 //call to initialize the exchange service
 export async function init() {
   await stateInit();
-
-  accounts = stateAccounts();
-  rates = stateRates();
-  log = stateLog();
 }
 
 //returns all internal accounts
 export function getAccounts() {
-  return accounts;
+  return stateAccounts();
 }
 
 //sets balance for an account
 export function setAccountBalance(accountId, balance) {
-  const account = findAccountById(accountId);
-
-  if (account != null) {
-    account.balance = balance;
-  }
+  return stateSetAccountBalance(accountId, balance);
 }
 
 //returns all current exchange rates
 export function getRates() {
-  return rates;
+  return stateRates();
 }
 
 //returns the whole transaction log
 export function getLog() {
-  return log;
+  return stateLog();
 }
 
 //sets the exchange rate for a given pair of currencies, and the reciprocal rate as well
 export function setRate(rateRequest) {
-  const { baseCurrency, counterCurrency, rate } = rateRequest;
-
-  rates[baseCurrency][counterCurrency] = rate;
-  rates[counterCurrency][baseCurrency] = Number((1 / rate).toFixed(5));
+  return stateSetRate(rateRequest);
 }
 
 //executes an exchange operation
@@ -58,15 +55,11 @@ export async function exchange(exchangeRequest) {
     baseAmount,
   } = exchangeRequest;
 
-  //get the exchange rate
-  const exchangeRate = rates[baseCurrency][counterCurrency];
-  //compute the requested (counter) amount
+  const rates = await stateRates();
+  const exchangeRate = rates[baseCurrency]?.[counterCurrency];
   const counterAmount = baseAmount * exchangeRate;
-  //find our account on the provided (base) currency
-  const baseAccount = findAccountByCurrency(baseCurrency);
-  //find our account on the counter currency
-  const counterAccount = findAccountByCurrency(counterCurrency);
-
+  const baseAccount = await getAccountByCurrency(baseCurrency);
+  
   //construct the result object with defaults
   const exchangeResult = {
     id: nanoid(),
@@ -78,42 +71,66 @@ export async function exchange(exchangeRequest) {
     obs: null,
   };
 
-  //check if we have funds on the counter currency account
-  if (counterAccount.balance >= counterAmount) {
-    //try to transfer from clients' base account
-    if (await transfer(clientBaseAccountId, baseAccount.id, baseAmount)) {
-      //try to transfer to clients' counter account
-      if (
-        await transfer(counterAccount.id, clientCounterAccountId, counterAmount)
-      ) {
-        //all good, update balances
-        baseAccount.balance += baseAmount;
-        counterAccount.balance -= counterAmount;
-        exchangeResult.ok = true;
-        exchangeResult.counterAmount = counterAmount;
-
-        registerSuccessfulExchangeMetrics({
-          baseCurrency,
-          counterCurrency,
-          baseAmount,
-          counterAmount,
-        });
-      } else {
-        //could not transfer to clients' counter account, return base amount to client
-        await transfer(baseAccount.id, clientBaseAccountId, baseAmount);
-        exchangeResult.obs = "Could not transfer to clients' account";
-      }
-    } else {
-      //could not withdraw from clients' account
-      exchangeResult.obs = "Could not withdraw from clients' account";
-    }
-  } else {
-    //not enough funds on internal counter account
+  if (baseAccount == null || !Number.isFinite(counterAmount)) {
     exchangeResult.obs = "Not enough funds on counter currency account";
+    await appendLog(exchangeResult);
+    return exchangeResult;
   }
 
-  //log the transaction and return it
-  log.push(exchangeResult);
+  const reservedCounterAccount = await reserveAccountBalanceByCurrency(
+    counterCurrency,
+    counterAmount
+  );
+
+  if (reservedCounterAccount == null) {
+    return failExchange(
+      exchangeResult,
+      "Not enough funds on counter currency account"
+    );
+  }
+
+  const baseAmountReceived = await transfer(
+    clientBaseAccountId,
+    baseAccount.id,
+    baseAmount
+  );
+
+  if (!baseAmountReceived) {
+    return failExchangeAndReleaseCounterBalance(
+      exchangeResult,
+      reservedCounterAccount.id,
+      counterAmount,
+      "Could not withdraw from clients' account"
+    );
+  }
+
+  const counterAmountSent = await transfer(
+    reservedCounterAccount.id,
+    clientCounterAccountId,
+    counterAmount
+  );
+
+  if (!counterAmountSent) {
+    await transfer(baseAccount.id, clientBaseAccountId, baseAmount);
+    return failExchangeAndReleaseCounterBalance(
+      exchangeResult,
+      reservedCounterAccount.id,
+      counterAmount,
+      "Could not transfer to clients' account"
+    );
+  }
+
+  exchangeResult.ok = true;
+  exchangeResult.counterAmount = counterAmount;
+
+  await addAccountBalanceAndLog(baseAccount.id, baseAmount, exchangeResult);
+
+  registerSuccessfulExchangeMetrics({
+    baseCurrency,
+    counterCurrency,
+    baseAmount,
+    counterAmount,
+  });
 
   return exchangeResult;
 }
@@ -127,22 +144,20 @@ async function transfer(fromAccountId, toAccountId, amount) {
   );
 }
 
-function findAccountByCurrency(currency) {
-  for (let account of accounts) {
-    if (account.currency == currency) {
-      return account;
-    }
-  }
+async function failExchangeAndReleaseCounterBalance(
+  exchangeResult,
+  counterAccountId,
+  counterAmount,
+  observation
+) {
+  await addAccountBalance(counterAccountId, counterAmount);
 
-  return null;
+  return failExchange(exchangeResult, observation);
 }
 
-function findAccountById(id) {
-  for (let account of accounts) {
-    if (account.id == id) {
-      return account;
-    }
-  }
+async function failExchange(exchangeResult, observation) {
+  exchangeResult.obs = observation;
+  await appendLog(exchangeResult);
 
-  return null;
+  return exchangeResult;
 }

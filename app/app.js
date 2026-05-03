@@ -19,30 +19,42 @@ app.use(express.json());
 
 // ACCOUNT endpoints
 
-app.get("/accounts", (req, res) => {
-  res.json(getAccounts());
+app.get("/accounts", async (req, res) => {
+  try {
+    res.json(await getAccounts());
+  } catch (err) {
+    handleStorageError(res, err);
+  }
 });
 
-app.put("/accounts/:id/balance", (req, res) => {
+app.put("/accounts/:id/balance", async (req, res) => {
   const accountId = req.params.id;
   const { balance } = req.body;
 
   if (!accountId || !balance) {
     return res.status(400).json({ error: "Malformed request" });
   } else {
-    setAccountBalance(accountId, balance);
+    try {
+      await setAccountBalance(accountId, balance);
 
-    res.json(getAccounts());
+      res.json(await getAccounts());
+    } catch (err) {
+      handleStorageError(res, err);
+    }
   }
 });
 
 // RATE endpoints
 
-app.get("/rates", (req, res) => {
-  res.json(getRates());
+app.get("/rates", async (req, res) => {
+  try {
+    res.json(await getRates());
+  } catch (err) {
+    handleStorageError(res, err);
+  }
 });
 
-app.put("/rates", (req, res) => {
+app.put("/rates", async (req, res) => {
   const { baseCurrency, counterCurrency, rate } = req.body;
 
   if (!baseCurrency || !counterCurrency || !rate) {
@@ -50,15 +62,23 @@ app.put("/rates", (req, res) => {
   }
 
   const newRateRequest = { ...req.body };
-  setRate(newRateRequest);
+  try {
+    await setRate(newRateRequest);
 
-  res.json(getRates());
+    res.json(await getRates());
+  } catch (err) {
+    handleStorageError(res, err);
+  }
 });
 
 // LOG endpoint
 
-app.get("/log", (req, res) => {
-  res.json(getLog());
+app.get("/log", async (req, res) => {
+  try {
+    res.json(await getLog());
+  } catch (err) {
+    handleStorageError(res, err);
+  }
 });
 
 // EXCHANGE endpoint
@@ -82,13 +102,17 @@ app.post("/exchange", async (req, res) => {
     return res.status(400).json({ error: "Malformed request" });
   }
 
-  const exchangeRequest = { ...req.body };
-  const exchangeResult = await exchange(exchangeRequest);
+  try {
+    const exchangeRequest = { ...req.body };
+    const exchangeResult = await exchange(exchangeRequest);
 
-  if (exchangeResult.ok) {
-    res.status(200).json(exchangeResult);
-  } else {
-    res.status(500).json(exchangeResult);
+    if (exchangeResult.ok) {
+      res.status(200).json(exchangeResult);
+    } else {
+      res.status(500).json(exchangeResult);
+    }
+  } catch (err) {
+    handleStorageError(res, err);
   }
 });
 
@@ -97,3 +121,8 @@ app.listen(port, () => {
 });
 
 export default app;
+
+function handleStorageError(res, err) {
+  console.error("Storage error:", err);
+  res.status(503).json({ error: "Storage unavailable" });
+}

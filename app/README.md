@@ -10,7 +10,7 @@ El servicio tiene un Dockerfile para poder armar una imagen de Docker y levantar
 
 ### Almacenamiento
 
-El storage de cuentas, tasas y el log se mantiene, por ahora, en unos archivos JSON. Tienen que existir 3 archivos en el directorio `./state`:
+El storage de cuentas, tasas y log vive en Redis. Los archivos JSON se usan solo para inicializar Redis cuando arranca vacio. Tienen que existir 3 archivos en el directorio `./seed`:
 
 `accounts.json`
 
@@ -117,7 +117,7 @@ Todas las operaciones se registran en un log. Ver más abajo.
 
 `GET /logs`
 
-Devuelve el log de operaciones. Este log se persiste cada 5 segundos.
+Devuelve el log de operaciones persistido en Redis.
 
 ## Metricas de negocio
 
@@ -134,6 +134,6 @@ Configuracion por variables de entorno (opcionales):
 
 ## TODO
 
-- No me gusta guardar todo en archivos .json, por ahora va, pero tendría que hacer algo distinto.
+- Redis es el storage runtime. Los archivos JSON quedan solo como seed inicial.
 - No valida casi nada, solo que los parámetros de los JSON tengan algún valor :collision:
 - Ver el tema del manejo de las cuentas, debería ser responsabilidad de otro servicio.

@@ -4,6 +4,7 @@ Estas pruebas suponen el caso base recibido sin modificaciones en `app/`.
 
 ```sh
 node --test tests/base-api.test.mjs
+node --test tests/redis-api.test.mjs
 node --test tests/base-api-known-issues.test.mjs
 ```
 
