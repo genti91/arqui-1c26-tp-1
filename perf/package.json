@@ -7,6 +7,7 @@
     "artillery": "artillery",
     "api": "artillery run rates.yaml -e api",
     "exchange": "artillery run exchange.yaml -e api",
+    "exchange:stress": "artillery run exchange-stress.yaml -e api",
     "scenario": "./run-scenario.sh"
   },
   "author": "",

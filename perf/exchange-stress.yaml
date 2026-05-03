@@ -1,0 +1,54 @@
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: "artillery-api"
+
+  pool: 80
+
+  phases:
+    - name: Warmup
+      duration: 30
+      arrivalRate: 1
+      rampTo: 3
+    - name: Load
+      duration: 60
+      arrivalRate: 3
+      rampTo: 10
+    - name: Stress
+      duration: 60
+      arrivalRate: 10
+      rampTo: 25
+
+scenarios:
+  - name: Buy USD/ARS
+    weight: 70
+    flow:
+      - post:
+          url: '/exchange'
+          headers:
+            Content-Type: application/json
+          json:
+            baseCurrency: 'USD'
+            counterCurrency: 'ARS'
+            baseAmount: 10
+            baseAccountId: 11
+            counterAccountId: 10
+
+  - name: Sell ARS/USD
+    weight: 30
+    flow:
+      - post:
+          url: '/exchange'
+          headers:
+            Content-Type: application/json
+          json:
+            baseCurrency: 'ARS'
+            counterCurrency: 'USD'
+            baseAmount: 10000
+            baseAccountId: 10
+            counterAccountId: 11
