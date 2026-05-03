@@ -8,21 +8,19 @@ config:
           port: 8125
           prefix: "artillery-api"
 
-  pool: 80
+  pool: 100
 
   phases:
     - name: Warmup
-      duration: 30
-      arrivalRate: 1
-      rampTo: 3
-    - name: Load
+      duration: 45
+      arrivalRate: 2
+      rampTo: 6
+    - name: Sustained load
+      duration: 900
+      arrivalRate: 8
+    - name: Cooldown
       duration: 60
-      arrivalRate: 3
-      rampTo: 10
-    - name: Stress
-      duration: 60
-      arrivalRate: 10
-      rampTo: 25
+      arrivalRate: 4
 
 scenarios:
   - name: Buy USD/ARS

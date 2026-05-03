@@ -6,8 +6,9 @@
   "scripts": {
     "artillery": "artillery",
     "api": "artillery run rates.yaml -e api",
-    "exchange": "artillery run exchange.yaml -e api",
-    "exchange:stress": "artillery run exchange-stress.yaml -e api",
+    "exchange:load": "artillery run exchange-load.yaml -e api",
+    "exchange:spike": "artillery run exchange-spike.yaml -e api",
+    "exchange:endurance": "artillery run exchange-endurance.yaml -e api",
     "scenario": "./run-scenario.sh"
   },
   "author": "",
