@@ -8,23 +8,23 @@ config:
           port: 8125
           prefix: "artillery-api"
 
-  pool: 100
+  pool: 250
 
   phases:
     - name: Warmup
-      duration: 45
-      arrivalRate: 2
-      rampTo: 6
+      duration: 120
+      arrivalRate: 5
+      rampTo: 20
     - name: Sustained load
-      duration: 900
-      arrivalRate: 8
+      duration: 1800
+      arrivalRate: 20
     - name: Cooldown
-      duration: 60
-      arrivalRate: 4
+      duration: 120
+      arrivalRate: 5
 
 scenarios:
   - name: Buy USD/ARS
-    weight: 70
+    weight: 55
     flow:
       - post:
           url: '/exchange'
@@ -33,12 +33,12 @@ scenarios:
           json:
             baseCurrency: 'USD'
             counterCurrency: 'ARS'
-            baseAmount: 10
+            baseAmount: 5
             baseAccountId: 11
             counterAccountId: 10
 
   - name: Sell ARS/USD
-    weight: 30
+    weight: 45
     flow:
       - post:
           url: '/exchange'
@@ -47,6 +47,6 @@ scenarios:
           json:
             baseCurrency: 'ARS'
             counterCurrency: 'USD'
-            baseAmount: 10000
+            baseAmount: 7000
             baseAccountId: 10
             counterAccountId: 11
