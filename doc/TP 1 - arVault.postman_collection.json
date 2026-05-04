@@ -54,19 +54,29 @@
 			"response": []
 		},
 		{
-			"name": "Get Log",
+			"name": "Get Logs",
 			"request": {
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://{{host}}:{{port}}/log",
+					"raw": "http://{{host}}:{{port}}/logs?page=1&limit=50",
 					"protocol": "http",
 					"host": [
 						"{{host}}"
 					],
 					"port": "{{port}}",
 					"path": [
-						"log"
+						"logs"
+					],
+					"query": [
+						{
+							"key": "page",
+							"value": "1"
+						},
+						{
+							"key": "limit",
+							"value": "50"
+						}
 					]
 				}
 			},
