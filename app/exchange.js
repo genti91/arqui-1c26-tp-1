@@ -1,6 +1,8 @@
 import { nanoid } from "nanoid";
 import { registerSuccessfulExchangeMetrics } from "./metrics.js";
 
+const MONEY_DECIMAL_PLACES = 2;
+
 import {
   init as stateInit,
   getAccounts as stateAccounts,
@@ -35,9 +37,9 @@ export function getRates() {
   return stateRates();
 }
 
-//returns the whole transaction log
-export function getLog() {
-  return stateLog();
+//returns a paginated transaction log
+export function getLog(pagination) {
+  return stateLog(pagination);
 }
 
 //sets the exchange rate for a given pair of currencies, and the reciprocal rate as well
@@ -57,7 +59,7 @@ export async function exchange(exchangeRequest) {
 
   const rates = await stateRates();
   const exchangeRate = rates[baseCurrency]?.[counterCurrency];
-  const counterAmount = baseAmount * exchangeRate;
+  const counterAmount = roundDecimalAmount(baseAmount * exchangeRate);
   const baseAccount = await getAccountByCurrency(baseCurrency);
   
   //construct the result object with defaults
@@ -72,9 +74,11 @@ export async function exchange(exchangeRequest) {
   };
 
   if (baseAccount == null || !Number.isFinite(counterAmount)) {
-    exchangeResult.obs = "Not enough funds on counter currency account";
-    await appendLog(exchangeResult);
-    return exchangeResult;
+    return failExchange(
+      exchangeResult,
+      "INSUFFICIENT_COUNTER_FUNDS",
+      "Not enough funds on counter currency account"
+    );
   }
 
   const reservedCounterAccount = await reserveAccountBalanceByCurrency(
@@ -85,6 +89,7 @@ export async function exchange(exchangeRequest) {
   if (reservedCounterAccount == null) {
     return failExchange(
       exchangeResult,
+      "INSUFFICIENT_COUNTER_FUNDS",
       "Not enough funds on counter currency account"
     );
   }
@@ -100,6 +105,7 @@ export async function exchange(exchangeRequest) {
       exchangeResult,
       reservedCounterAccount.id,
       counterAmount,
+      "CLIENT_WITHDRAWAL_FAILED",
       "Could not withdraw from clients' account"
     );
   }
@@ -116,6 +122,7 @@ export async function exchange(exchangeRequest) {
       exchangeResult,
       reservedCounterAccount.id,
       counterAmount,
+      "CLIENT_DEPOSIT_FAILED",
       "Could not transfer to clients' account"
     );
   }
@@ -144,18 +151,28 @@ async function transfer(fromAccountId, toAccountId, amount) {
   );
 }
 
+function roundDecimalAmount(amount) {
+  if (!Number.isFinite(amount)) {
+    return amount;
+  }
+
+  return Number(amount.toFixed(MONEY_DECIMAL_PLACES));
+}
+
 async function failExchangeAndReleaseCounterBalance(
   exchangeResult,
   counterAccountId,
   counterAmount,
+  errorCode,
   observation
 ) {
   await addAccountBalance(counterAccountId, counterAmount);
 
-  return failExchange(exchangeResult, observation);
+  return failExchange(exchangeResult, errorCode, observation);
 }
 
-async function failExchange(exchangeResult, observation) {
+async function failExchange(exchangeResult, errorCode, observation) {
+  exchangeResult.errorCode = errorCode;
   exchangeResult.obs = observation;
   await appendLog(exchangeResult);
 

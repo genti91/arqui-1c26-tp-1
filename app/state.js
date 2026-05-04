@@ -13,8 +13,13 @@ const LOG_FILE = "./seed/log.json";
 const ACCOUNTS_KEY = "arvault:accounts";
 const RATES_KEY = "arvault:rates";
 const LOG_KEY = "arvault:log";
+const MONEY_DECIMAL_PLACES = 2;
 
 const RESERVE_ACCOUNT_BALANCE_BY_CURRENCY_SCRIPT = `
+local function roundAmount(amount)
+  return tonumber(string.format("%.2f", amount))
+end
+
 local accounts = redis.call("HGETALL", KEYS[1])
 local currency = ARGV[1]
 local amount = tonumber(ARGV[2])
@@ -28,7 +33,7 @@ for i = 1, #accounts, 2 do
 
   if account.currency == currency then
     if account.balance >= amount then
-      account.balance = account.balance - amount
+      account.balance = roundAmount(account.balance - amount)
       redis.call("HSET", KEYS[1], accounts[i], cjson.encode(account))
       return cjson.encode(account)
     end
@@ -41,6 +46,10 @@ return nil
 `;
 
 const ADD_ACCOUNT_BALANCE_AND_LOG_SCRIPT = `
+local function roundAmount(amount)
+  return tonumber(string.format("%.2f", amount))
+end
+
 local accountJson = redis.call("HGET", KEYS[1], ARGV[1])
 
 if accountJson == false then
@@ -48,7 +57,7 @@ if accountJson == false then
 end
 
 local account = cjson.decode(accountJson)
-account.balance = account.balance + tonumber(ARGV[2])
+account.balance = roundAmount(account.balance + tonumber(ARGV[2]))
 
 redis.call("HSET", KEYS[1], ARGV[1], cjson.encode(account))
 redis.call("RPUSH", KEYS[2], ARGV[3])
@@ -57,6 +66,10 @@ return 1
 `;
 
 const ADD_ACCOUNT_BALANCE_SCRIPT = `
+local function roundAmount(amount)
+  return tonumber(string.format("%.2f", amount))
+end
+
 local accountJson = redis.call("HGET", KEYS[1], ARGV[1])
 
 if accountJson == false then
@@ -64,7 +77,7 @@ if accountJson == false then
 end
 
 local account = cjson.decode(accountJson)
-account.balance = account.balance + tonumber(ARGV[2])
+account.balance = roundAmount(account.balance + tonumber(ARGV[2]))
 
 redis.call("HSET", KEYS[1], ARGV[1], cjson.encode(account))
 
@@ -109,11 +122,25 @@ export async function getRates() {
   return rates;
 }
 
-export async function getLog() {
+export async function getLog({ page, limit }) {
   const client = await getRedisClient();
-  const rawLog = await client.lRange(LOG_KEY, 0, -1);
+  const totalItems = await client.lLen(LOG_KEY);
+  const totalPages = Math.ceil(totalItems / limit);
+  const start = (page - 1) * limit;
+  const end = start + limit - 1;
+  const rawLog = start < totalItems
+    ? await client.lRange(LOG_KEY, start, end)
+    : [];
 
-  return rawLog.map(JSON.parse);
+  return {
+    items: rawLog.map(JSON.parse),
+    pagination: {
+      page,
+      limit,
+      totalItems,
+      totalPages,
+    },
+  };
 }
 
 export async function getAccountByCurrency(currency) {
@@ -130,11 +157,13 @@ export async function setAccountBalance(accountId, balance) {
   const account = await getAccountById(accountId);
 
   if (account == null) {
-    return;
+    return null;
   }
 
-  account.balance = balance;
+  account.balance = roundDecimalAmount(balance);
   await client.hSet(ACCOUNTS_KEY, String(account.id), JSON.stringify(account));
+
+  return account;
 }
 
 export async function setRate(rateRequest) {
@@ -145,7 +174,7 @@ export async function setRate(rateRequest) {
   await client.hSet(
     RATES_KEY,
     `${counterCurrency}:${baseCurrency}`,
-    String(Number((1 / rate).toFixed(5)))
+    String(1 / rate)
   );
 }
 
@@ -180,7 +209,11 @@ export async function addAccountBalanceAndLog(accountId, amount, logEntry) {
   const client = await getRedisClient();
   const updated = await client.eval(ADD_ACCOUNT_BALANCE_AND_LOG_SCRIPT, {
     keys: [ACCOUNTS_KEY, LOG_KEY],
-    arguments: [String(accountId), String(amount), JSON.stringify(logEntry)],
+    arguments: [
+      String(accountId),
+      String(roundDecimalAmount(amount)),
+      JSON.stringify(normalizeLogEntry(logEntry)),
+    ],
   });
 
   return updated == 1;
@@ -189,7 +222,7 @@ export async function addAccountBalanceAndLog(accountId, amount, logEntry) {
 export async function appendLog(logEntry) {
   const client = await getRedisClient();
 
-  await client.rPush(LOG_KEY, JSON.stringify(logEntry));
+  await client.rPush(LOG_KEY, JSON.stringify(normalizeLogEntry(logEntry)));
 }
 
 async function getRedisClient() {
@@ -271,6 +304,25 @@ async function getAccountById(accountId) {
   const rawAccount = await client.hGet(ACCOUNTS_KEY, String(accountId));
 
   return rawAccount ? JSON.parse(rawAccount) : null;
+}
+
+function normalizeLogEntry(logEntry) {
+  return {
+    ...logEntry,
+    counterAmount: roundDecimalAmount(logEntry.counterAmount),
+    request: {
+      ...logEntry.request,
+      baseAmount: roundDecimalAmount(logEntry.request?.baseAmount),
+    },
+  };
+}
+
+function roundDecimalAmount(amount) {
+  if (!Number.isFinite(amount)) {
+    return amount;
+  }
+
+  return Number(amount.toFixed(MONEY_DECIMAL_PLACES));
 }
 
 async function loadJson(fileName) {

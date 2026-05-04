@@ -21,13 +21,13 @@ test("GET /accounts conserva el contrato actual", async () => {
   assert.equal(typeof findAccount(response.body, 1).balance, "number");
 });
 
-test("la app recibida expone /log y no /logs", async () => {
+test("la app expone /logs y no /log", async () => {
   const documentedResponse = await request("GET", "/logs");
-  const realResponse = await request("GET", "/log");
+  const oldResponse = await request("GET", "/log");
 
-  assert.equal(documentedResponse.status, 404);
-  assert.equal(realResponse.status, 200);
-  assert.ok(Array.isArray(realResponse.body));
+  assert.equal(documentedResponse.status, 200);
+  assertLogResponse(documentedResponse.body);
+  assert.equal(oldResponse.status, 404);
 });
 
 test("POST /exchange exitoso conserva respuesta, saldos y log actuales", async () => {
@@ -68,42 +68,40 @@ test("POST /exchange exitoso conserva respuesta, saldos y log actuales", async (
     );
 
     const logAfter = await getLog();
-    assert.equal(logAfter.length, logBefore.length + 1);
-    assert.equal(logAfter.at(-1).id, response.body.id);
+    const lastLogEntry = await getLastLogEntry(logAfter.pagination.totalItems);
+
+    assert.equal(
+      logAfter.pagination.totalItems,
+      logBefore.pagination.totalItems + 1
+    );
+    assert.equal(lastLogEntry.id, response.body.id);
   } finally {
     await restoreAccounts(initialAccounts);
   }
 });
 
-test("monto negativo queda aceptado y modifica saldos en sentido inverso", async () => {
+test("monto negativo devuelve 400 y no cambia saldos", async () => {
   const initialAccounts = await getAccounts();
-  const rates = await getRates();
-  const accountsBefore = await getAccounts();
-  const baseAmount = -5;
-  const counterAmount = baseAmount * rates.USD.ARS;
 
   try {
+    const accountsBefore = await getAccounts();
+    const logBefore = await getLog();
     const response = await postExchange({
       baseCurrency: "USD",
       counterCurrency: "ARS",
-      baseAmount,
+      baseAmount: -5,
       baseAccountId: 11,
       counterAccountId: 10,
     });
 
-    assert.equal(response.status, 200);
-    assert.equal(response.body.ok, true);
-    assert.equal(response.body.counterAmount, counterAmount);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.errorCode, "INVALID_BASE_AMOUNT");
 
     const accountsAfter = await getAccounts();
-    assert.equal(
-      findAccountByCurrency(accountsAfter, "USD").balance,
-      findAccountByCurrency(accountsBefore, "USD").balance + baseAmount
-    );
-    assert.equal(
-      findAccountByCurrency(accountsAfter, "ARS").balance,
-      findAccountByCurrency(accountsBefore, "ARS").balance - counterAmount
-    );
+    const logAfter = await getLog();
+
+    assertAccountsEqual(accountsAfter, accountsBefore);
+    assert.equal(logAfter.pagination.totalItems, logBefore.pagination.totalItems);
   } finally {
     await restoreAccounts(initialAccounts);
   }
@@ -121,13 +119,13 @@ test("monto cero devuelve 400 y no agrega una entrada al log", async () => {
   });
 
   assert.equal(response.status, 400);
-  assert.deepEqual(response.body, { error: "Malformed request" });
+  assert.equal(response.body.errorCode, "INVALID_BASE_AMOUNT");
 
   const logAfter = await getLog();
-  assert.equal(logAfter.length, logBefore.length);
+  assert.equal(logAfter.pagination.totalItems, logBefore.pagination.totalItems);
 });
 
-test("tasa inexistente devuelve 500 funcional con motivo de saldo insuficiente", async () => {
+test("tasa inexistente devuelve 400 y no registra operacion", async () => {
   const initialAccounts = await getAccounts();
   const logBefore = await getLog();
 
@@ -140,19 +138,17 @@ test("tasa inexistente devuelve 500 funcional con motivo de saldo insuficiente",
       counterAccountId: 12,
     });
 
-    assert.equal(response.status, 500);
-    assert.equal(response.body.ok, false);
-    assert.equal(response.body.exchangeRate, undefined);
-    assert.equal(response.body.obs, "Not enough funds on counter currency account");
+    assert.equal(response.status, 400);
+    assert.equal(response.body.errorCode, "RATE_NOT_FOUND");
 
     const logAfter = await getLog();
-    assert.equal(logAfter.length, logBefore.length + 1);
+    assert.equal(logAfter.pagination.totalItems, logBefore.pagination.totalItems);
   } finally {
     await restoreAccounts(initialAccounts);
   }
 });
 
-test("saldo insuficiente devuelve 500 y registra operacion fallida", async () => {
+test("saldo insuficiente devuelve 409 y registra operacion fallida", async () => {
   const initialAccounts = await getAccounts();
   const rates = await getRates();
 
@@ -170,8 +166,9 @@ test("saldo insuficiente devuelve 500 y registra operacion fallida", async () =>
       counterAccountId: 10,
     });
 
-    assert.equal(response.status, 500);
+    assert.equal(response.status, 409);
     assert.equal(response.body.ok, false);
+    assert.equal(response.body.errorCode, "INSUFFICIENT_COUNTER_FUNDS");
     assert.equal(response.body.obs, "Not enough funds on counter currency account");
 
     const accountsAfter = await getAccounts();
@@ -179,7 +176,10 @@ test("saldo insuficiente devuelve 500 y registra operacion fallida", async () =>
     assert.equal(findAccountByCurrency(accountsAfter, "USD").balance, findAccountByCurrency(accountsBefore, "USD").balance);
 
     const logAfter = await getLog();
-    assert.equal(logAfter.length, logBefore.length + 1);
+    assert.equal(
+      logAfter.pagination.totalItems,
+      logBefore.pagination.totalItems + 1
+    );
   } finally {
     await restoreAccounts(initialAccounts);
   }
@@ -220,9 +220,25 @@ async function getAccounts() {
 }
 
 async function getLog() {
-  const response = await request("GET", "/log");
+  const response = await request("GET", "/logs");
   assert.equal(response.status, 200);
+  assertLogResponse(response.body);
   return response.body;
+}
+
+async function getLastLogEntry(totalItems) {
+  const response = await request("GET", `/logs?page=${totalItems}&limit=1`);
+  assert.equal(response.status, 200);
+  assertLogResponse(response.body);
+  return response.body.items[0];
+}
+
+function assertLogResponse(body) {
+  assert.ok(Array.isArray(body.items));
+  assert.equal(typeof body.pagination.page, "number");
+  assert.equal(typeof body.pagination.limit, "number");
+  assert.equal(typeof body.pagination.totalItems, "number");
+  assert.equal(typeof body.pagination.totalPages, "number");
 }
 
 function postExchange(payload) {
@@ -263,4 +279,13 @@ function findAccount(accounts, id) {
 
 function findAccountByCurrency(accounts, currency) {
   return accounts.find((account) => account.currency === currency);
+}
+
+function assertAccountsEqual(accountsAfter, accountsBefore) {
+  for (const accountBefore of accountsBefore) {
+    assert.equal(
+      findAccount(accountsAfter, accountBefore.id).balance,
+      accountBefore.balance
+    );
+  }
 }

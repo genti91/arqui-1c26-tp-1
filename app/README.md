@@ -115,9 +115,104 @@ Todas las operaciones se registran en un log. Ver más abajo.
 
 ### Logs
 
-`GET /logs`
+`GET /logs?page=1&limit=50`
 
-Devuelve el log de operaciones persistido en Redis.
+Devuelve el log de operaciones persistido en Redis, paginado en orden cronologico.
+
+- `page`: pagina a consultar. Debe ser un entero positivo. Default: `1`.
+- `limit`: cantidad de entradas por pagina. Debe ser un entero positivo. Default: `50`. La API aplica un maximo interno de `100`.
+
+Respuesta:
+
+    {
+        "items": [
+            {
+                "id": "Uml8yqzZ4Mjgk2tKuN6mL",
+                "ts": "2025-02-10T00:10:25.202Z",
+                "ok": true,
+                "request": {
+                    "baseCurrency": "USD",
+                    "counterCurrency": "ARS",
+                    "baseAmount": 100,
+                    "baseAccountId": 11,
+                    "counterAccountId": 10
+                },
+                "exchangeRate": 1064,
+                "counterAmount": 106400,
+                "obs": null
+            }
+        ],
+        "pagination": {
+            "page": 1,
+            "limit": 50,
+            "totalItems": 1,
+            "totalPages": 1
+        }
+    }
+
+### Contrato de rutas actualizado
+
+Todas las rutas responden JSON. Cuando una validación falla, la respuesta tiene este formato:
+
+    {
+        "errorCode": "INVALID_BASE_AMOUNT",
+        "obs": "Invalid base amount"
+    }
+
+Errores comunes:
+
+- `400 INVALID_JSON`: el body no es JSON válido.
+- `503 STORAGE_UNAVAILABLE`: Redis no está disponible.
+
+Las validaciones devuelven `400` y no modifican cuentas, tasas ni logs. Los montos de wallet se normalizan a 2 decimales antes de responder o persistir.
+
+Rutas disponibles:
+
+- `GET /accounts`: devuelve las cuentas internas ordenadas por `id`.
+- `PUT /accounts/:id/balance`: actualiza una cuenta interna y devuelve solo la cuenta modificada. `id` debe ser entero positivo y `balance` debe ser un número finito mayor o igual a 0. Errores: `INVALID_ACCOUNT_ID`, `INVALID_BALANCE`, `ACCOUNT_NOT_FOUND`.
+- `GET /rates`: devuelve las tasas de cambio vigentes.
+- `PUT /rates`: actualiza una tasa y guarda la recíproca como `1 / rate`. Las monedas deben existir, no estar vacías y ser distintas; `rate` debe ser positivo, finito y con recíproca finita. Errores: `INVALID_BASE_CURRENCY`, `INVALID_COUNTER_CURRENCY`, `SAME_CURRENCY`, `INVALID_RATE`.
+- `POST /exchange`: ejecuta una operación de cambio. Errores de validación: `INVALID_BASE_CURRENCY`, `INVALID_COUNTER_CURRENCY`, `SAME_CURRENCY`, `INVALID_BASE_AMOUNT`, `INVALID_BASE_ACCOUNT_ID`, `INVALID_COUNTER_ACCOUNT_ID`, `RATE_NOT_FOUND`, `INVALID_COUNTER_AMOUNT`.
+- `GET /logs`: devuelve logs paginados. Acepta `page` y `limit`; el `limit` efectivo nunca supera `100`. Errores: `INVALID_PAGE`, `INVALID_LIMIT`. Reemplaza al endpoint viejo `GET /log`. `GET /log` ya no existe.
+
+Si `POST /exchange` no tiene saldo suficiente en la cuenta propia de la moneda destino, devuelve `409 INSUFFICIENT_COUNTER_FUNDS` y registra la operación fallida en el log.
+
+Una respuesta exitosa de `POST /exchange` tiene esta forma:
+
+    {
+        "id": "Uml8yqzZ4Mjgk2tKuN6mL",
+        "ts": "2025-02-10T00:10:25.202Z",
+        "ok": true,
+        "request": {
+            "baseCurrency": "USD",
+            "counterCurrency": "ARS",
+            "baseAccountId": 11,
+            "counterAccountId": 10,
+            "baseAmount": 100
+        },
+        "exchangeRate": 1064,
+        "counterAmount": 106400,
+        "obs": null
+    }
+
+Una respuesta exitosa de `PUT /accounts/:id/balance` tiene esta forma:
+
+    {
+        "id": 1,
+        "currency": "ARS",
+        "balance": 2000000
+    }
+
+Una respuesta exitosa de `GET /rates` y `PUT /rates` tiene esta forma:
+
+    {
+        "USD": {
+            "ARS": 1064
+        },
+        "ARS": {
+            "USD": 0.0009398496240601503
+        }
+    }
 
 ## Metricas de negocio
 

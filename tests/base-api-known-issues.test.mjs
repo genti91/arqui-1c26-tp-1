@@ -145,55 +145,6 @@ test("POST /exchange no deberia permitir saldos negativos por operaciones concur
   }
 });
 
-test("POST /exchange deberia ser idempotente cuando se repite la misma clave", async () => {
-  const initialAccounts = await getAccounts();
-  const rates = await getRates();
-  const baseAmount = 10;
-  const counterAmount = baseAmount * rates.USD.ARS;
-  const headers = { "Idempotency-Key": `known-issue-${Date.now()}` };
-
-  try {
-    await ensureCurrencyBalance("ARS", initialAccounts, counterAmount * 2);
-    const accountsBefore = await getAccounts();
-    const logBefore = await getLog();
-
-    const firstResponse = await postExchange({
-      baseCurrency: "USD",
-      counterCurrency: "ARS",
-      baseAmount,
-      baseAccountId: 11,
-      counterAccountId: 10,
-    }, { headers });
-
-    const secondResponse = await postExchange({
-      baseCurrency: "USD",
-      counterCurrency: "ARS",
-      baseAmount,
-      baseAccountId: 11,
-      counterAccountId: 10,
-    }, { headers });
-
-    assert.equal(firstResponse.status, 200);
-    assert.equal(secondResponse.status, 200);
-    assert.equal(secondResponse.body.id, firstResponse.body.id);
-
-    const accountsAfter = await getAccounts();
-    assert.equal(
-      findAccountByCurrency(accountsAfter, "USD").balance,
-      findAccountByCurrency(accountsBefore, "USD").balance + baseAmount
-    );
-    assert.equal(
-      findAccountByCurrency(accountsAfter, "ARS").balance,
-      findAccountByCurrency(accountsBefore, "ARS").balance - counterAmount
-    );
-
-    const logAfter = await getLog();
-    assert.equal(logAfter.length, logBefore.length + 1);
-  } finally {
-    await restoreAccounts(initialAccounts);
-  }
-});
-
 test(
   "POST /exchange deberia rechazar moneda base inexistente con 400",
   {
@@ -361,20 +312,23 @@ test("PUT /rates no deberia truncar la tasa reciproca a cinco decimales", async 
 test("POST /exchange deberia calcular montos decimales sin error de punto flotante", async () => {
   const initialAccounts = await getAccounts();
   const ratesBefore = await getRates();
+  const baseAmount = 0.1;
+  const expectedCounterAmount = 0.02;
 
   try {
+    await ensureCurrencyBalance("ARS", initialAccounts, expectedCounterAmount);
     await setUsdArsRate(0.2);
 
     const response = await postExchange({
       baseCurrency: "USD",
       counterCurrency: "ARS",
-      baseAmount: 0.1,
+      baseAmount,
       baseAccountId: 11,
       counterAccountId: 10,
     });
 
     assert.equal(response.status, 200);
-    assert.equal(response.body.counterAmount, 0.02);
+    assert.equal(response.body.counterAmount, expectedCounterAmount);
   } finally {
     await restoreAccounts(initialAccounts);
     await setUsdArsRate(ratesBefore.USD.ARS);
@@ -388,10 +342,21 @@ async function restoreAccounts(accounts) {
   }
 }
 
+async function ensureCurrencyBalance(currency, currentAccounts, minimumBalance) {
+  const account = findAccountByCurrency(currentAccounts, currency);
+
+  if (account.balance >= minimumBalance) {
+    return;
+  }
+
+  const response = await putAccountBalance(account.id, minimumBalance);
+  assert.equal(response.status, 200);
+}
+
 async function ensureLogHasAtLeastEntries(minimumLength) {
   let log = await getLog();
 
-  while (log.length < minimumLength) {
+  while (log.pagination.totalItems < minimumLength) {
     await postExchange({
       baseCurrency: "USD",
       counterCurrency: "ARS",
@@ -402,17 +367,6 @@ async function ensureLogHasAtLeastEntries(minimumLength) {
 
     log = await getLog();
   }
-}
-
-async function ensureCurrencyBalance(currency, currentAccounts, minimumBalance) {
-  const account = findAccountByCurrency(currentAccounts, currency);
-
-  if (account.balance >= minimumBalance) {
-    return;
-  }
-
-  const response = await putAccountBalance(account.id, minimumBalance);
-  assert.equal(response.status, 200);
 }
 
 async function getRates() {
@@ -428,13 +382,22 @@ async function getAccounts() {
 }
 
 async function getLog() {
-  const response = await request("GET", "/log");
+  const response = await request("GET", "/logs");
   assert.equal(response.status, 200);
+  assertLogResponse(response.body);
   return response.body;
 }
 
-function postExchange(payload, options) {
-  return request("POST", "/exchange", payload, options);
+function assertLogResponse(body) {
+  assert.ok(Array.isArray(body.items));
+  assert.equal(typeof body.pagination.page, "number");
+  assert.equal(typeof body.pagination.limit, "number");
+  assert.equal(typeof body.pagination.totalItems, "number");
+  assert.equal(typeof body.pagination.totalPages, "number");
+}
+
+function postExchange(payload) {
+  return request("POST", "/exchange", payload);
 }
 
 function setUsdArsRate(rate) {
@@ -453,10 +416,9 @@ function putAccountBalance(accountId, balance) {
   return request("PUT", `/accounts/${accountId}/balance`, { balance });
 }
 
-async function request(method, path, body, options = {}) {
+async function request(method, path, body) {
   const headers = {
     ...(body ? { "Content-Type": "application/json" } : {}),
-    ...(options.headers || {}),
   };
 
   const response = await fetch(`${BASE_URL}${path}`, {

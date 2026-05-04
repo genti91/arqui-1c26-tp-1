@@ -27,6 +27,9 @@ test("Redis conserva saldos y log cuando se reinicia solo la API", async () => {
 
     const accountsBeforeRestart = await getAccounts();
     const logBeforeRestart = await getLog();
+    const lastLogEntryIdBeforeRestart = await getLastLogEntryId(
+      logBeforeRestart.pagination.totalItems
+    );
 
     await restartApi();
 
@@ -34,8 +37,14 @@ test("Redis conserva saldos y log cuando se reinicia solo la API", async () => {
     const logAfterRestart = await getLog();
 
     assert.deepEqual(accountsAfterRestart, accountsBeforeRestart);
-    assert.equal(logAfterRestart.length, logBeforeRestart.length);
-    assert.equal(logAfterRestart.at(-1).id, logBeforeRestart.at(-1).id);
+    assert.equal(
+      logAfterRestart.pagination.totalItems,
+      logBeforeRestart.pagination.totalItems
+    );
+    assert.equal(
+      await getLastLogEntryId(logAfterRestart.pagination.totalItems),
+      lastLogEntryIdBeforeRestart
+    );
   } finally {
     await restoreAccounts(initialAccounts);
   }
@@ -72,7 +81,7 @@ test("Redis reserva saldo atomico y no permite doble gasto concurrente", async (
       return response.status === 200;
     });
     const failedResponses = responses.filter((response) => {
-      return response.status === 500;
+      return response.status === 409;
     });
     const accountsAfter = await getAccounts();
 
@@ -146,9 +155,25 @@ async function getAccounts() {
 }
 
 async function getLog() {
-  const response = await request("GET", "/log");
+  const response = await request("GET", "/logs");
   assert.equal(response.status, 200);
+  assertLogResponse(response.body);
   return response.body;
+}
+
+async function getLastLogEntryId(totalItems) {
+  const response = await request("GET", `/logs?page=${totalItems}&limit=1`);
+  assert.equal(response.status, 200);
+  assertLogResponse(response.body);
+  return response.body.items[0].id;
+}
+
+function assertLogResponse(body) {
+  assert.ok(Array.isArray(body.items));
+  assert.equal(typeof body.pagination.page, "number");
+  assert.equal(typeof body.pagination.limit, "number");
+  assert.equal(typeof body.pagination.totalItems, "number");
+  assert.equal(typeof body.pagination.totalPages, "number");
 }
 
 function postExchange(payload) {
