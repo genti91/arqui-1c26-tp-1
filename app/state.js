@@ -13,7 +13,11 @@ const LOG_FILE = "./seed/log.json";
 const ACCOUNTS_KEY = "arvault:accounts";
 const RATES_KEY = "arvault:rates";
 const LOG_KEY = "arvault:log";
+const SEED_LOCK_KEY = "arvault:seed-lock";
 const MONEY_DECIMAL_PLACES = 2;
+const SEED_LOCK_TTL_SECONDS = 30;
+const SEED_WAIT_ATTEMPTS = 300;
+const SEED_WAIT_MS = 100;
 
 const RESERVE_ACCOUNT_BALANCE_BY_CURRENCY_SCRIPT = `
 local function roundAmount(amount)
@@ -271,12 +275,32 @@ function createRedisClient() {
 }
 
 async function seedRedisIfEmpty() {
-  const accountsCount = await redisClient.hLen(ACCOUNTS_KEY);
-
-  if (accountsCount > 0) {
+  if (await hasSeedData()) {
     return;
   }
 
+  const seedLock = await redisClient.set(SEED_LOCK_KEY, "1", {
+    NX: true,
+    EX: SEED_LOCK_TTL_SECONDS,
+  });
+
+  if (seedLock !== "OK") {
+    await waitForSeedData();
+    return;
+  }
+
+  try {
+    if (await hasSeedData()) {
+      return;
+    }
+
+    await seedRedis();
+  } finally {
+    await redisClient.del(SEED_LOCK_KEY);
+  }
+}
+
+async function seedRedis() {
   const accounts = await loadJson(ACCOUNTS_FILE);
   const rates = await loadJson(RATES_FILE);
   const log = await loadJson(LOG_FILE);
@@ -297,6 +321,30 @@ async function seedRedisIfEmpty() {
   }
 
   await seed.exec();
+}
+
+async function hasSeedData() {
+  const accountsCount = await redisClient.hLen(ACCOUNTS_KEY);
+
+  return accountsCount > 0;
+}
+
+async function waitForSeedData() {
+  for (let attempt = 0; attempt < SEED_WAIT_ATTEMPTS; attempt += 1) {
+    if (await hasSeedData()) {
+      return;
+    }
+
+    await sleep(SEED_WAIT_MS);
+  }
+
+  throw new Error("Timed out waiting for Redis seed");
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 async function getAccountById(accountId) {
