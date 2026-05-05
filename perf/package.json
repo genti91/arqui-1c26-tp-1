@@ -5,10 +5,11 @@
   "main": "index.js",
   "scripts": {
     "artillery": "artillery",
-    "api": "artillery run rates.yaml -e api",
-    "exchange:load": "artillery run exchange-load.yaml -e api",
-    "exchange:spike": "artillery run exchange-spike.yaml -e api",
-    "exchange:endurance": "artillery run exchange-endurance.yaml -e api",
+    "generate:scaled": "node generate-scaled-scenarios.mjs",
+    "api": "node run-scaled.mjs rates api",
+    "exchange:load": "node run-scaled.mjs exchange-load api",
+    "exchange:spike": "node run-scaled.mjs exchange-spike api",
+    "exchange:endurance": "node run-scaled.mjs exchange-endurance api",
     "scenario": "./run-scenario.sh"
   },
   "author": "",

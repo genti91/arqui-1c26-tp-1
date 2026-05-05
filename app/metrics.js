@@ -1,4 +1,5 @@
 import dgram from "dgram";
+import { addBusinessMetrics } from "./state.js";
 
 const METRICS_HOST = process.env.STATSD_HOST || "graphite";
 const METRICS_PORT = Number(process.env.STATSD_PORT || 8125);
@@ -6,24 +7,25 @@ const METRICS_PREFIX = process.env.STATSD_PREFIX || "exchange-api";
 
 const socket = dgram.createSocket("udp4");
 
-const businessTotals = {
-  volumeByCurrency: {},
-  netByCurrency: {},
-};
-
-export function registerSuccessfulExchangeMetrics({
+export async function registerSuccessfulExchangeMetrics({
   baseCurrency,
   counterCurrency,
   baseAmount,
   counterAmount,
 }) {
-  // Volume is always positive for both currencies involved.
-  addToMap(businessTotals.volumeByCurrency, baseCurrency, baseAmount);
-  addToMap(businessTotals.volumeByCurrency, counterCurrency, counterAmount);
+  let businessTotals;
 
-  // Net follows business rule: buys add, sells subtract.
-  addToMap(businessTotals.netByCurrency, counterCurrency, counterAmount);
-  addToMap(businessTotals.netByCurrency, baseCurrency, -baseAmount);
+  try {
+    businessTotals = await addBusinessMetrics({
+      baseCurrency,
+      counterCurrency,
+      baseAmount,
+      counterAmount,
+    });
+  } catch (err) {
+    console.error("Could not update business metrics", err.message);
+    return;
+  }
 
   sendGauge(
     `business.volume.${baseCurrency}`,
@@ -41,11 +43,6 @@ export function registerSuccessfulExchangeMetrics({
     `business.net.${counterCurrency}`,
     businessTotals.netByCurrency[counterCurrency]
   );
-}
-
-function addToMap(map, key, amount) {
-  const current = map[key] || 0;
-  map[key] = Number((current + amount).toFixed(5));
 }
 
 function sendGauge(metricName, value) {

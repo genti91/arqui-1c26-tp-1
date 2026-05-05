@@ -132,7 +132,7 @@ export async function exchange(exchangeRequest) {
 
   await addAccountBalanceAndLog(baseAccount.id, baseAmount, exchangeResult);
 
-  registerSuccessfulExchangeMetrics({
+  await registerSuccessfulExchangeMetrics({
     baseCurrency,
     counterCurrency,
     baseAmount,

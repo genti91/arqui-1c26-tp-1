@@ -1,0 +1,103 @@
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: artillery-api
+  pool: 700
+  phases:
+    - name: Warmup
+      duration: 30
+      arrivalRate: 5
+      rampTo: 20
+    - name: Baseline
+      duration: 60
+      arrivalRate: 25
+    - name: Spike
+      duration: 45
+      arrivalRate: 300
+    - name: Recovery
+      duration: 90
+      arrivalRate: 25
+scenarios:
+  - name: Buy USD/ARS nginx-1
+    weight: 55
+    flow:
+      - post:
+          url: 'http://localhost:5555/exchange'
+          headers:
+            Content-Type: application/json
+          json:
+            baseCurrency: USD
+            counterCurrency: ARS
+            baseAmount: 5
+            baseAccountId: 11
+            counterAccountId: 10
+  - name: Sell ARS/USD nginx-1
+    weight: 45
+    flow:
+      - post:
+          url: 'http://localhost:5555/exchange'
+          headers:
+            Content-Type: application/json
+          json:
+            baseCurrency: ARS
+            counterCurrency: USD
+            baseAmount: 7000
+            baseAccountId: 10
+            counterAccountId: 11
+  - name: Buy USD/ARS nginx-2
+    weight: 55
+    flow:
+      - post:
+          url: 'http://localhost:5556/exchange'
+          headers:
+            Content-Type: application/json
+          json:
+            baseCurrency: USD
+            counterCurrency: ARS
+            baseAmount: 5
+            baseAccountId: 11
+            counterAccountId: 10
+  - name: Sell ARS/USD nginx-2
+    weight: 45
+    flow:
+      - post:
+          url: 'http://localhost:5556/exchange'
+          headers:
+            Content-Type: application/json
+          json:
+            baseCurrency: ARS
+            counterCurrency: USD
+            baseAmount: 7000
+            baseAccountId: 10
+            counterAccountId: 11
+  - name: Buy USD/ARS nginx-3
+    weight: 55
+    flow:
+      - post:
+          url: 'http://localhost:5557/exchange'
+          headers:
+            Content-Type: application/json
+          json:
+            baseCurrency: USD
+            counterCurrency: ARS
+            baseAmount: 5
+            baseAccountId: 11
+            counterAccountId: 10
+  - name: Sell ARS/USD nginx-3
+    weight: 45
+    flow:
+      - post:
+          url: 'http://localhost:5557/exchange'
+          headers:
+            Content-Type: application/json
+          json:
+            baseCurrency: ARS
+            counterCurrency: USD
+            baseAmount: 7000
+            baseAccountId: 10
+            counterAccountId: 11

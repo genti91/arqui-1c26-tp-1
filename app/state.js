@@ -13,8 +13,11 @@ const LOG_FILE = "./seed/log.json";
 const ACCOUNTS_KEY = "arvault:accounts";
 const RATES_KEY = "arvault:rates";
 const LOG_KEY = "arvault:log";
+const BUSINESS_VOLUME_METRICS_KEY = "arvault:metrics:business:volume";
+const BUSINESS_NET_METRICS_KEY = "arvault:metrics:business:net";
 const SEED_LOCK_KEY = "arvault:seed-lock";
 const MONEY_DECIMAL_PLACES = 2;
+const METRICS_DECIMAL_PLACES = 5;
 const SEED_LOCK_TTL_SECONDS = 30;
 const SEED_WAIT_ATTEMPTS = 300;
 const SEED_WAIT_MS = 100;
@@ -86,6 +89,33 @@ account.balance = roundAmount(account.balance + tonumber(ARGV[2]))
 redis.call("HSET", KEYS[1], ARGV[1], cjson.encode(account))
 
 return 1
+`;
+
+const ADD_BUSINESS_METRICS_SCRIPT = `
+local function roundMetric(amount)
+  return string.format("%.5f", amount)
+end
+
+local function addMetric(key, currency, amount)
+  local current = tonumber(redis.call("HGET", key, currency) or "0")
+  local nextValue = roundMetric(current + tonumber(amount))
+
+  redis.call("HSET", key, currency, nextValue)
+
+  return nextValue
+end
+
+local baseCurrency = ARGV[1]
+local counterCurrency = ARGV[2]
+local baseAmount = tonumber(ARGV[3])
+local counterAmount = tonumber(ARGV[4])
+
+return {
+  addMetric(KEYS[1], baseCurrency, baseAmount),
+  addMetric(KEYS[1], counterCurrency, counterAmount),
+  addMetric(KEYS[2], baseCurrency, -baseAmount),
+  addMetric(KEYS[2], counterCurrency, counterAmount)
+}
 `;
 
 let redisClient = null;
@@ -227,6 +257,35 @@ export async function appendLog(logEntry) {
   const client = await getRedisClient();
 
   await client.rPush(LOG_KEY, JSON.stringify(normalizeLogEntry(logEntry)));
+}
+
+export async function addBusinessMetrics({
+  baseCurrency,
+  counterCurrency,
+  baseAmount,
+  counterAmount,
+}) {
+  const client = await getRedisClient();
+  const totals = await client.eval(ADD_BUSINESS_METRICS_SCRIPT, {
+    keys: [BUSINESS_VOLUME_METRICS_KEY, BUSINESS_NET_METRICS_KEY],
+    arguments: [
+      baseCurrency,
+      counterCurrency,
+      String(roundMetricAmount(baseAmount)),
+      String(roundMetricAmount(counterAmount)),
+    ],
+  });
+
+  return {
+    volumeByCurrency: {
+      [baseCurrency]: Number(totals[0]),
+      [counterCurrency]: Number(totals[1]),
+    },
+    netByCurrency: {
+      [baseCurrency]: Number(totals[2]),
+      [counterCurrency]: Number(totals[3]),
+    },
+  };
 }
 
 async function getRedisClient() {
@@ -371,6 +430,14 @@ function roundDecimalAmount(amount) {
   }
 
   return Number(amount.toFixed(MONEY_DECIMAL_PLACES));
+}
+
+function roundMetricAmount(amount) {
+  if (!Number.isFinite(amount)) {
+    return amount;
+  }
+
+  return Number(amount.toFixed(METRICS_DECIMAL_PLACES));
 }
 
 async function loadJson(fileName) {

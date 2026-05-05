@@ -1197,7 +1197,7 @@
           "hide": false,
           "refCount": 0,
           "refId": "C",
-          "target": "alias(removeBelowValue(asPercent(derivative(keepLastValue(stats.gauges.cadvisor.$container.cpu_cumulative_usage, 100)), 10000000000), 0.0001), 'CPU')",
+          "target": "alias(sumSeries(removeBelowValue(asPercent(derivative(keepLastValue(stats.gauges.cadvisor.$container.cpu_cumulative_usage, 100)), 10000000000), 0.0001)), 'CPU')",
           "textEditor": true
         },
         {
@@ -1208,7 +1208,7 @@
           "hide": false,
           "refCount": 0,
           "refId": "B",
-          "target": "alias(asPercent(stats.gauges.cadvisor.$container.memory_working_set, 34359738368), 'Memory')",
+          "target": "alias(sumSeries(asPercent(stats.gauges.cadvisor.$container.memory_working_set, 34359738368)), 'Memory')",
           "textEditor": true
         }
       ],
@@ -1513,19 +1513,24 @@
         "name": "container",
         "options": [
           {
-            "selected": false,
-            "text": "exchange-api-1",
-            "value": "exchange-api-1"
+            "selected": true,
+            "text": "-",
+            "value": "-"
           },
           {
             "selected": false,
-            "text": "exchange-api-2",
-            "value": "exchange-api-2"
+            "text": "exchange-api-*",
+            "value": "exchange-api-*"
           },
           {
             "selected": false,
-            "text": "exchange-api-3",
-            "value": "exchange-api-3"
+            "text": "exchange-nginx-*-1",
+            "value": "exchange-nginx-*-1"
+          },
+          {
+            "selected": false,
+            "text": "exchange-redis-1",
+            "value": "exchange-redis-1"
           },
           {
             "selected": false,
@@ -1544,21 +1549,16 @@
           },
           {
             "selected": false,
-            "text": "exchange-nginx-1",
-            "value": "exchange-nginx-1"
+            "text": "exchange-*",
+            "value": "exchange-*"
           },
           {
             "selected": false,
             "text": "exchange_bbox_1",
             "value": "exchange_bbox_1"
-          },
-          {
-            "selected": true,
-            "text": "-",
-            "value": "-"
           }
         ],
-        "query": "exchange-api-1, exchange-api-2, exchange-api-3, exchange-cadvisor-1, exchange-grafana-1, exchange-graphite-1,  exchange-nginx-1, exchange_bbox_1, -",
+        "query": "-, exchange-api-*, exchange-nginx-*-1, exchange-redis-1, exchange-cadvisor-1, exchange-grafana-1, exchange-graphite-1, exchange-*, exchange_bbox_1",
         "type": "custom"
       }
     ]

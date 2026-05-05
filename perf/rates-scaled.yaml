@@ -1,0 +1,67 @@
+config:
+  environments:
+    api:
+      target: 'http://localhost:5555'
+      plugins:
+        statsd:
+          host: localhost
+          port: 8125
+          prefix: artillery-api
+  pool: 150
+  phases:
+    - name: Warmup
+      duration: 30
+      arrivalRate: 5
+      rampTo: 20
+    - name: Read baseline
+      duration: 120
+      arrivalRate: 40
+    - name: Read peak
+      duration: 60
+      arrivalRate: 100
+scenarios:
+  - name: Rates (/rates) nginx-1
+    weight: 70
+    flow:
+      - get:
+          url: 'http://localhost:5555/rates'
+  - name: Accounts (/accounts) nginx-1
+    weight: 20
+    flow:
+      - get:
+          url: 'http://localhost:5555/accounts'
+  - name: Logs first page (/logs) nginx-1
+    weight: 10
+    flow:
+      - get:
+          url: 'http://localhost:5555/logs?page=1&limit=50'
+  - name: Rates (/rates) nginx-2
+    weight: 70
+    flow:
+      - get:
+          url: 'http://localhost:5556/rates'
+  - name: Accounts (/accounts) nginx-2
+    weight: 20
+    flow:
+      - get:
+          url: 'http://localhost:5556/accounts'
+  - name: Logs first page (/logs) nginx-2
+    weight: 10
+    flow:
+      - get:
+          url: 'http://localhost:5556/logs?page=1&limit=50'
+  - name: Rates (/rates) nginx-3
+    weight: 70
+    flow:
+      - get:
+          url: 'http://localhost:5557/rates'
+  - name: Accounts (/accounts) nginx-3
+    weight: 20
+    flow:
+      - get:
+          url: 'http://localhost:5557/accounts'
+  - name: Logs first page (/logs) nginx-3
+    weight: 10
+    flow:
+      - get:
+          url: 'http://localhost:5557/logs?page=1&limit=50'
