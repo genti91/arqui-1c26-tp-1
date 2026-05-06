@@ -168,6 +168,7 @@ Las validaciones devuelven `400` y no modifican cuentas, tasas ni logs. Los mont
 
 Rutas disponibles:
 
+- `GET /healthcheck`: devuelve `{ "status": "ok" }` si la API puede leer su estado minimo desde Redis. Si Redis no esta disponible o el estado no esta listo, devuelve `503`.
 - `GET /accounts`: devuelve las cuentas internas ordenadas por `id`.
 - `PUT /accounts/:id/balance`: actualiza una cuenta interna y devuelve solo la cuenta modificada. `id` debe ser entero positivo y `balance` debe ser un número finito mayor o igual a 0. Errores: `INVALID_ACCOUNT_ID`, `INVALID_BALANCE`, `ACCOUNT_NOT_FOUND`.
 - `GET /rates`: devuelve las tasas de cambio vigentes.

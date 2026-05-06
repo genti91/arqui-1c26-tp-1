@@ -10,6 +10,16 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - 'redis_data:/data'
+  healthchecker:
+    build: ./healthchecker
+    environment:
+      - HEALTHCHECK_INTERVAL_MS=5000
+      - HEALTHCHECK_TIMEOUT_MS=2000
+      - HEALTHCHECK_FAILURE_THRESHOLD=2
+      - HEALTHCHECK_RESTART_COOLDOWN_MS=30000
+      - HEALTHCHECK_STARTUP_GRACE_MS=15000
+    volumes:
+      - '/var/run/docker.sock:/var/run/docker.sock'
   graphite:
     image: 'graphiteapp/graphite-statsd:1.1.10-5'
     volumes:

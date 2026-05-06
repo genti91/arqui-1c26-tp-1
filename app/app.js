@@ -27,6 +27,23 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
+// HEALTHCHECK endpoint
+
+app.get("/healthcheck", async (req, res) => {
+  try {
+    const accounts = await getAccounts();
+    const rates = await getRates();
+
+    if (accounts.length === 0 || Object.keys(rates).length === 0) {
+      return sendError(res, 503, "STORAGE_NOT_READY", "Storage not ready");
+    }
+
+    res.json({ status: "ok" });
+  } catch (err) {
+    handleStorageError(res, err);
+  }
+});
+
 // ACCOUNT endpoints
 
 app.get("/accounts", async (req, res) => {
