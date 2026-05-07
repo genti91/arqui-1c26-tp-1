@@ -7,7 +7,7 @@ config:
           host: localhost
           port: 8125
           prefix: artillery-api
-  pool: 250
+  pool: 5000
   phases:
     - name: Warmup
       duration: 60
@@ -15,11 +15,11 @@ config:
       rampTo: 20
     - name: Ramp to high load
       duration: 120
-      arrivalRate: 20
-      rampTo: 60
+      arrivalRate: 100
+      rampTo: 1200
     - name: Sustained high load
       duration: 180
-      arrivalRate: 60
+      arrivalRate: 1200
 scenarios:
   - name: Buy USD/ARS nginx-1
     weight: 55

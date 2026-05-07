@@ -7,7 +7,7 @@ config:
           host: localhost
           port: 8125
           prefix: artillery-api
-  pool: 700
+  pool: 5000
   phases:
     - name: Warmup
       duration: 30
@@ -17,10 +17,10 @@ config:
       duration: 60
       arrivalRate: 25
     - name: Spike
-      duration: 45
-      arrivalRate: 300
+      duration: 20
+      arrivalRate: 5000
     - name: Recovery
-      duration: 90
+      duration: 60
       arrivalRate: 25
 scenarios:
   - name: Buy USD/ARS nginx-1

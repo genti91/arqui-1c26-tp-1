@@ -15,7 +15,7 @@ config:
       rampTo: 20
     - name: Sustained load
       duration: 1800
-      arrivalRate: 20
+      arrivalRate: 1500
     - name: Cooldown
       duration: 120
       arrivalRate: 5

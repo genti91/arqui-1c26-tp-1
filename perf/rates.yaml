@@ -8,8 +8,7 @@ config:
           port: 8125
           prefix: "artillery-api"
 
-  pool: 150
-
+  pool: 5000
   phases:
     - name: Warmup
       duration: 30
@@ -17,10 +16,10 @@ config:
       rampTo: 20
     - name: Read baseline
       duration: 120
-      arrivalRate: 40
+      arrivalRate: 100
     - name: Read peak
       duration: 60
-      arrivalRate: 100
+      arrivalRate: 2000
 
 scenarios:
   - name: Rates (/rates)
